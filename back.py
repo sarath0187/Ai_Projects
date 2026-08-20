@@ -5,7 +5,6 @@ import sqlite3
 import tempfile
 from typing import Annotated, Any, Dict, TypedDict
 
-from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.messages import BaseMessage, SystemMessage
@@ -18,13 +17,10 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
 from ddgs import DDGS
-import os
 
-os.environ["GROQ_API_KEY"] = "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"
-# ============================================================
-# Environment & Core Setup
-# ============================================================
-load_dotenv()
+# ====================== API KEY ======================
+os.environ["GROQ_API_KEY"] = "gsk_your_actual_key_here"   # ← put your key here
+# =====================================================
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
@@ -38,9 +34,6 @@ embeddings = HuggingFaceEmbeddings(
 _THREAD_RETRIEVERS: Dict[str, Any] = {}
 
 
-# ============================================================
-# PDF Ingestion
-# ============================================================
 def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
     if not file_bytes:
         raise ValueError("No file content received.")
@@ -63,16 +56,12 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
         retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
         _THREAD_RETRIEVERS[str(thread_id)] = retriever
-
         return f"Successfully indexed PDF ({len(chunks)} text chunks created)."
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
 
-# ============================================================
-# Tools
-# ============================================================
 @tool
 def search_tool(query: str) -> str:
     """Search the web for current events and real-time information."""
@@ -124,9 +113,6 @@ tools = [rag_tool, calculator, search_tool]
 llm_with_tools = llm.bind_tools(tools)
 
 
-# ============================================================
-# State & Graph
-# ============================================================
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     thread_id: str
@@ -146,7 +132,6 @@ def chat_node(state: ChatState):
             "3. Never stop after calling a tool."
         )
     )
-
     messages = [system_message] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
@@ -164,8 +149,5 @@ conn = sqlite3.connect("chatbot.db", check_same_thread=False)
 chatbot = graph.compile(checkpointer=SqliteSaver(conn))
 
 
-# ============================================================
-# Helper
-# ============================================================
 def thread_has_document(thread_id: str) -> bool:
     return str(thread_id) in _THREAD_RETRIEVERS
