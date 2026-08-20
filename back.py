@@ -165,8 +165,8 @@ def chat_node(state: ChatState):
         "If the user asks about an uploaded document, ALWAYS call rag_tool first.\n"
         "Use search_tool for real-time web info or current news.\n"
         "Use the calculator tool for arithmetic."
+        )
     )
-)
     messages = [system_message, *state["messages"]]
     response = llm_with_tools.invoke(messages)
 
