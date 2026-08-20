@@ -32,7 +32,7 @@ os.environ["GROQ_API_KEY"] = "gsk_vOgo5mFRuRDO8fSmpBIgWGdyb3FYEynLriaycrZXyTEfTy
 
 # Initialize the LLM
 llm = ChatGroq(
-    model="openai/gpt-oss-20b",
+    model="openai/gpt-oss-120b",
     temperature=0,
 )
 
