@@ -3,32 +3,26 @@ from __future__ import annotations
 import os
 import sqlite3
 import tempfile
-from typing import Annotated, Any, Dict, Optional, TypedDict
+from typing import Annotated, Any, Dict, TypedDict
 
 from dotenv import load_dotenv
-
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.vectorstores import FAISS
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
+from ddgs import DDGS
 
 # ============================================================
 # Environment & Core Setup
 # ============================================================
-
 load_dotenv()
-
-# Set environment variables directly in code
-os.environ["GROQ_API_KEY"] = "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"
 
 # Initialize the LLM
 llm = ChatGroq(
@@ -47,7 +41,6 @@ _THREAD_RETRIEVERS: Dict[str, Any] = {}
 # ============================================================
 # PDF Ingestion
 # ============================================================
-
 def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
     """
     Reads incoming PDF bytes, splits text into chunks,
@@ -61,7 +54,6 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
         temp_path = temp_file.name
 
     try:
-        # Load and split PDF
         loader = PyPDFLoader(temp_path)
         docs = loader.load()
 
@@ -71,15 +63,12 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
         )
         chunks = splitter.split_documents(docs)
 
-        # Store in FAISS
         vector_store = FAISS.from_documents(chunks, embeddings)
         retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
-        # Link retriever to thread
         _THREAD_RETRIEVERS[str(thread_id)] = retriever
 
         return f"Successfully indexed PDF ({len(chunks)} text chunks created)."
-
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -88,19 +77,16 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
 # ============================================================
 # Tools
 # ============================================================
-
-# DuckDuckGo Search Tool
-from duckduckgo_search import DDGS
-from langchain_core.tools import tool
-
 @tool
 def search_tool(query: str) -> str:
     """Search the web for current events and real-time information."""
     try:
-        results = DDGS().text(query, max_results=3)
+        results = DDGS().text(query, max_results=5)
         if not results:
             return "No web search results found."
-        return "\n\n".join([f"**{r.get('title', '')}**\n{r.get('body', '')}" for r in results])
+        return "\n\n".join(
+            [f"**{r.get('title', '')}**\n{r.get('body', '')}" for r in results]
+        )
     except Exception as e:
         return f"Search failed: {str(e)}"
 
@@ -115,16 +101,13 @@ def rag_tool(
     The thread_id is automatically injected by LangGraph.
     """
     retriever = _THREAD_RETRIEVERS.get(str(thread_id))
-
     if not retriever:
         return "No PDF has been uploaded for this chat yet. Please upload one first."
 
     docs = retriever.invoke(query)
-
     if not docs:
         return "No matching information found in the uploaded PDF."
 
-    # Return plain matching text directly
     return "\n\n".join([doc.page_content for doc in docs])
 
 
@@ -144,7 +127,7 @@ def calculator(first_num: float, second_num: float, operation: str) -> str:
     return "Unsupported operation."
 
 
-# Bind tools (RAG + Calculator + DuckDuckGo Search) to the model
+# Bind tools
 tools = [rag_tool, calculator, search_tool]
 llm_with_tools = llm.bind_tools(tools)
 
@@ -152,31 +135,31 @@ llm_with_tools = llm.bind_tools(tools)
 # ============================================================
 # State & Execution Nodes
 # ============================================================
-
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     thread_id: str
 
 
 def chat_node(state: ChatState):
-   system_message = SystemMessage(
-    content=(
-        "You are a helpful AI assistant.\n"
-        "If the user asks about an uploaded document, ALWAYS call rag_tool first.\n"
-        "Use search_tool for real-time web info or current news.\n"
-        "Use the calculator tool for arithmetic."
+    system_message = SystemMessage(
+        content=(
+            "You are a helpful AI assistant with access to tools.\n\n"
+            "Available tools:\n"
+            "- rag_tool: Use this when the user asks about an uploaded PDF/document.\n"
+            "- search_tool: Use this for current events, news, or real-time information.\n"
+            "- calculator: Use this for math calculations.\n\n"
+            "Always use the appropriate tool when needed."
         )
     )
+
     messages = [system_message, *state["messages"]]
     response = llm_with_tools.invoke(messages)
-
     return {"messages": [response]}
 
 
 # ============================================================
 # Graph & Memory Setup
 # ============================================================
-
 graph = StateGraph(ChatState)
 
 graph.add_node("chat_node", chat_node)
@@ -194,7 +177,6 @@ chatbot = graph.compile(checkpointer=SqliteSaver(conn))
 # ============================================================
 # Helper Functions
 # ============================================================
-
 def thread_has_document(thread_id: str) -> bool:
     """Check if a given thread already has an indexed PDF."""
     return str(thread_id) in _THREAD_RETRIEVERS
