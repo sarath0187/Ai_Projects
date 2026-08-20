@@ -5,9 +5,6 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from back import chatbot, ingest_pdf, thread_has_document
 
 
-# ============================================================
-# Utilities
-# ============================================================
 def generate_thread_id():
     return str(uuid.uuid4())
 
@@ -31,9 +28,7 @@ def load_conversation(thread_id):
     return state.values.get("messages", [])
 
 
-# ============================================================
 # Session State
-# ============================================================
 if "message_history" not in st.session_state:
     st.session_state["message_history"] = []
 
@@ -49,9 +44,7 @@ threads = st.session_state["chat_threads"][::-1]
 selected_thread = None
 
 
-# ============================================================
 # Sidebar
-# ============================================================
 st.sidebar.title("Multi Utility AI Assistant")
 st.sidebar.markdown(f"**Thread ID:** `{thread_key}`")
 
@@ -61,7 +54,6 @@ if st.sidebar.button("New Chat", use_container_width=True):
 
 st.sidebar.divider()
 
-# PDF Section
 if thread_has_document(thread_key):
     st.sidebar.success("✅ A PDF is indexed and ready for this thread.")
 else:
@@ -85,9 +77,8 @@ if uploaded_pdf:
                 st.sidebar.error(f"Error indexing PDF: {str(e)}")
 
 st.sidebar.divider()
-
-# Past Conversations
 st.sidebar.subheader("Past Conversations")
+
 if not threads:
     st.sidebar.write("No previous chats found.")
 else:
@@ -97,21 +88,16 @@ else:
             selected_thread = t_id
 
 
-# ============================================================
-# Main Chat Area
-# ============================================================
+# Main Chat
 st.title("AI Assistant & Document Reader")
 
-# Show history
 for message in st.session_state["message_history"]:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# User Input
 user_input = st.chat_input("Ask a question, upload a PDF, or run calculations...")
 
 if user_input:
-    # Show user message
     st.session_state["message_history"].append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.write(user_input)
@@ -124,6 +110,7 @@ if user_input:
     with st.chat_message("assistant"):
         status_holder = {"box": None}
         final_answer = ""
+        tool_was_used = False
 
         for message_chunk, metadata in chatbot.stream(
             {
@@ -133,8 +120,8 @@ if user_input:
             config=CONFIG,
             stream_mode="messages",
         ):
-            # Tool status
             if isinstance(message_chunk, ToolMessage):
+                tool_was_used = True
                 tool_name = getattr(message_chunk, "name", "Tool")
                 if status_holder["box"] is None:
                     status_holder["box"] = st.status(f"🔧 Running `{tool_name}`...", expanded=True)
@@ -145,11 +132,12 @@ if user_input:
                         expanded=True,
                     )
 
-            # Collect final answer
             if isinstance(message_chunk, AIMessage) and message_chunk.content:
-                final_answer = message_chunk.content
+                content = message_chunk.content.strip()
+                # Ignore junk like "?", "!", ".", etc.
+                if len(content) > 2:
+                    final_answer = content
 
-        # Close status
         if status_holder["box"] is not None:
             status_holder["box"].update(
                 label="✅ Tool finished",
@@ -157,21 +145,17 @@ if user_input:
                 expanded=False,
             )
 
-        # Show answer
         if final_answer:
             st.markdown(final_answer)
         else:
             st.warning("No response generated. Please try again.")
 
-    # Save to history
     st.session_state["message_history"].append(
         {"role": "assistant", "content": final_answer}
     )
 
 
-# ============================================================
-# Load Past Conversation
-# ============================================================
+# Load past conversation
 if selected_thread and selected_thread != thread_key:
     st.session_state["thread_id"] = selected_thread
     messages = load_conversation(selected_thread)
