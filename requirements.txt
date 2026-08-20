@@ -10,4 +10,5 @@ torch
 faiss-cpu
 pypdf
 duckduckgo-search
+ddg-search
 python-dotenv
