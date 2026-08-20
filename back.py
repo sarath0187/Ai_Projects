@@ -159,15 +159,14 @@ class ChatState(TypedDict):
 
 
 def chat_node(state: ChatState):
-    system_message = SystemMessage(
-        content=(
-            "You are a helpful AI assistant.\n"
-            "If the user asks about an uploaded document, ALWAYS call rag_tool first.\n"
-            "Use duckduckgo_search for real-time web info or current news.\n"
-            "Use the calculator tool for arithmetic."
-        )
+   system_message = SystemMessage(
+    content=(
+        "You are a helpful AI assistant.\n"
+        "If the user asks about an uploaded document, ALWAYS call rag_tool first.\n"
+        "Use search_tool for real-time web info or current news.\n"
+        "Use the calculator tool for arithmetic."
     )
-
+)
     messages = [system_message, *state["messages"]]
     response = llm_with_tools.invoke(messages)
 
