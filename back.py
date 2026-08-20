@@ -20,7 +20,7 @@ from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
 
 # Load API key safely from environment variable
 # Run in terminal: export GROQ_API_KEY="your_new_key_here"
-os.environ["GROQ_API_KEY"] = "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"
+os.environ["GROQ_API_KEY"] = "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"
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
