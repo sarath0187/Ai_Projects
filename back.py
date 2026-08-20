@@ -90,7 +90,19 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
 # ============================================================
 
 # DuckDuckGo Search Tool
-search_tool = DuckDuckGoSearchRun(region="us-en")
+from duckduckgo_search import DDGS
+from langchain_core.tools import tool
+
+@tool
+def search_tool(query: str) -> str:
+    """Search the web for current events and real-time information."""
+    try:
+        results = DDGS().text(query, max_results=3)
+        if not results:
+            return "No web search results found."
+        return "\n\n".join([f"**{r.get('title', '')}**\n{r.get('body', '')}" for r in results])
+    except Exception as e:
+        return f"Search failed: {str(e)}"
 
 
 @tool
