@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 from typing import Annotated, Any, Dict, TypedDict
 
+from duckduckgo_search import DDGS  # Fixed import name
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.messages import BaseMessage, SystemMessage
@@ -16,15 +17,14 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
-from ddgs import DDGS
 
-# ====================== API KEY ======================
-os.environ["GROQ_API_KEY"] = "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"   # ← put your key here
-# =====================================================
+# Load API key safely from environment variable
+# Run in terminal: export GROQ_API_KEY="your_new_key_here"
+os.environ["GROQ_API_KEY"] = "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"
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
-    temperature=0,
+    temperature=0.2,  # Slight temperature boost helps stop repetitive short outputs
 )
 
 embeddings = HuggingFaceEmbeddings(
@@ -66,12 +66,18 @@ def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
 def search_tool(query: str) -> str:
     """Search the web for current events and real-time information."""
     try:
-        results = DDGS().text(query, max_results=5)
+        results = DDGS().text(query, max_results=3)
         if not results:
             return "No web search results found."
-        return "\n\n".join(
-            [f"**{r.get('title', '')}**\n{r.get('body', '')}" for r in results]
-        )
+        
+        # Clean up formatting to prevent token disruption
+        formatted = []
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "").strip()
+            body = r.get("body", "").strip()
+            formatted.append(f"Result {i}: {title} - {body}")
+            
+        return "\n".join(formatted)
     except Exception as e:
         return f"Search failed: {str(e)}"
 
@@ -79,10 +85,12 @@ def search_tool(query: str) -> str:
 @tool
 def rag_tool(
     query: str,
-    thread_id: Annotated[str, InjectedState("thread_id")],
+    state: Annotated[dict, InjectedState],
 ) -> str:
     """Search the uploaded PDF for answers matching the user's query."""
+    thread_id = state.get("thread_id", "")
     retriever = _THREAD_RETRIEVERS.get(str(thread_id))
+    
     if not retriever:
         return "No PDF has been uploaded for this chat yet. Please upload one first."
 
@@ -117,24 +125,25 @@ class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     thread_id: str
 
+
 def chat_node(state: ChatState):
-    system_message = SystemMessage(
+    system_prompt = SystemMessage(
         content=(
-            "You are a smart and helpful AI assistant.\n\n"
-            "You have access to these tools:\n"
-            "- search_tool: Use this for any current news, recent events, or real-time information.\n"
-            "- rag_tool: Use this only when the user asks about an uploaded PDF.\n"
-            "- calculator: Use for math questions.\n\n"
-            "Very Important Rules:\n"
-            "1. When the user asks for news or current information → ALWAYS call search_tool first.\n"
-            "2. After you get the result from search_tool, you MUST write a clear, complete, and well-written final answer.\n"
-            "3. Never reply with just one word, '?', '!', or incomplete sentences.\n"
-            "4. Summarize the search results nicely and give useful information to the user.\n"
-            "5. If the search tool returns results, use them to answer properly."
+            "You are a helpful AI assistant. Answer user queries clearly and thoroughly.\n\n"
+            "When using tools:\n"
+            "1. Use `search_tool` for current news and web info.\n"
+            "2. Use `rag_tool` for PDF questions.\n"
+            "3. Use `calculator` for math.\n\n"
+            "Always synthesize tool outputs into a full, well-structured response."
         )
     )
 
-    messages = [system_message] + state["messages"]
+    # Filter out existing system messages to avoid duplication
+    filtered_messages = [
+        msg for msg in state["messages"] if not isinstance(msg, SystemMessage)
+    ]
+    
+    messages = [system_prompt] + filtered_messages
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
