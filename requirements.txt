@@ -3,5 +3,9 @@ langchain-core
 langchain-community
 langgraph
 langchain-groq
+langchain-huggingface
+sentence-transformers
 faiss-cpu
 pypdf
+duckduckgo-search
+python-dotenv
