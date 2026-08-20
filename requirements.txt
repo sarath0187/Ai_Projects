@@ -9,6 +9,5 @@ sentence-transformers
 torch
 faiss-cpu
 pypdf
-duckduckgo-search
-ddg-search
+ddgs
 python-dotenv
