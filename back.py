@@ -18,13 +18,14 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
 from ddgs import DDGS
+import os
 
+os.environ["GROQ_API_KEY"] = "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"
 # ============================================================
 # Environment & Core Setup
 # ============================================================
 load_dotenv()
 
-# Initialize the LLM
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
     temperature=0,
@@ -34,7 +35,6 @@ embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-mpnet-base-v2"
 )
 
-# Global dictionary mapping thread_id -> FAISS retriever
 _THREAD_RETRIEVERS: Dict[str, Any] = {}
 
 
@@ -42,10 +42,6 @@ _THREAD_RETRIEVERS: Dict[str, Any] = {}
 # PDF Ingestion
 # ============================================================
 def ingest_pdf(file_bytes: bytes, thread_id: str) -> str:
-    """
-    Reads incoming PDF bytes, splits text into chunks,
-    and indexes them into FAISS stored by thread_id.
-    """
     if not file_bytes:
         raise ValueError("No file content received.")
 
@@ -96,10 +92,7 @@ def rag_tool(
     query: str,
     thread_id: Annotated[str, InjectedState("thread_id")],
 ) -> str:
-    """
-    Search the uploaded PDF for answers matching the user's query.
-    The thread_id is automatically injected by LangGraph.
-    """
+    """Search the uploaded PDF for answers matching the user's query."""
     retriever = _THREAD_RETRIEVERS.get(str(thread_id))
     if not retriever:
         return "No PDF has been uploaded for this chat yet. Please upload one first."
@@ -127,13 +120,12 @@ def calculator(first_num: float, second_num: float, operation: str) -> str:
     return "Unsupported operation."
 
 
-# Bind tools
 tools = [rag_tool, calculator, search_tool]
 llm_with_tools = llm.bind_tools(tools)
 
 
 # ============================================================
-# State & Execution Nodes
+# State & Graph
 # ============================================================
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -145,23 +137,22 @@ def chat_node(state: ChatState):
         content=(
             "You are a helpful AI assistant with access to tools.\n\n"
             "Available tools:\n"
-            "- rag_tool: Use this when the user asks about an uploaded PDF/document.\n"
-            "- search_tool: Use this for current events, news, or real-time information.\n"
-            "- calculator: Use this for math calculations.\n\n"
-            "Always use the appropriate tool when needed."
+            "- rag_tool → Use for questions about the uploaded PDF.\n"
+            "- search_tool → Use for current news, recent events, or real-time information.\n"
+            "- calculator → Use for math calculations.\n\n"
+            "Instructions:\n"
+            "1. Call the correct tool when needed.\n"
+            "2. After receiving the tool result, you MUST give a clear final answer.\n"
+            "3. Never stop after calling a tool."
         )
     )
 
-    messages = [system_message, *state["messages"]]
+    messages = [system_message] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
 
-# ============================================================
-# Graph & Memory Setup
-# ============================================================
 graph = StateGraph(ChatState)
-
 graph.add_node("chat_node", chat_node)
 graph.add_node("tools", ToolNode(tools))
 
@@ -169,14 +160,12 @@ graph.add_edge(START, "chat_node")
 graph.add_conditional_edges("chat_node", tools_condition)
 graph.add_edge("tools", "chat_node")
 
-# Persistent memory using SQLite
 conn = sqlite3.connect("chatbot.db", check_same_thread=False)
 chatbot = graph.compile(checkpointer=SqliteSaver(conn))
 
 
 # ============================================================
-# Helper Functions
+# Helper
 # ============================================================
 def thread_has_document(thread_id: str) -> bool:
-    """Check if a given thread already has an indexed PDF."""
     return str(thread_id) in _THREAD_RETRIEVERS
