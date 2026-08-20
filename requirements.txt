@@ -2,9 +2,11 @@ streamlit
 langchain-core
 langchain-community
 langgraph
+langgraph-checkpoint-sqlite
 langchain-groq
 langchain-huggingface
 sentence-transformers
+torch
 faiss-cpu
 pypdf
 duckduckgo-search
