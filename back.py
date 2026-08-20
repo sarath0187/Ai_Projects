@@ -127,24 +127,26 @@ class ChatState(TypedDict):
 
 
 def chat_node(state: ChatState):
-    system_prompt = SystemMessage(
+    # System message explicitly instructing tool usage and dynamic temporal context
+    system_message = SystemMessage(
         content=(
-            "You are a helpful AI assistant. Answer user queries clearly and thoroughly.\n\n"
-            "When using tools:\n"
-            "1. Use `search_tool` for current news and web info.\n"
-            "2. Use `rag_tool` for PDF questions.\n"
-            "3. Use `calculator` for math.\n\n"
-            "Always synthesize tool outputs into a full, well-structured response."
+            "You are an AI assistant equipped with external tools.\n"
+            "CRITICAL INSTRUCTION: You do not have real-time live web access on your own.\n"
+            "1. Whenever the user asks for news, current events, weather, scores, or recent facts, "
+            "you MUST invoke `search_tool(query=...)` first.\n"
+            "2. If the user asks a math question, use `calculator`.\n"
+            "3. If the user asks about an uploaded document, use `rag_tool`.\n"
+            "Do NOT answer real-time or current queries from memory. Always call `search_tool`."
         )
     )
 
-    # Filter out existing system messages to avoid duplication
-    filtered_messages = [
+    # Clean existing system messages from history to prevent duplication
+    user_and_ai_msgs = [
         msg for msg in state["messages"] if not isinstance(msg, SystemMessage)
     ]
     
-    messages = [system_prompt] + filtered_messages
-    response = llm_with_tools.invoke(messages)
+    full_messages = [system_message] + user_and_ai_msgs
+    response = llm_with_tools.invoke(full_messages)
     return {"messages": [response]}
 
 
