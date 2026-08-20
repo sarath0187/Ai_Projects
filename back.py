@@ -19,7 +19,7 @@ from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
 from ddgs import DDGS
 
 # ====================== API KEY ======================
-os.environ["GROQ_API_KEY"] = "gsk_your_actual_key_here"   # ← put your key here
+os.environ["GROQ_API_KEY"] = "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"   # ← put your key here
 # =====================================================
 
 llm = ChatGroq(
