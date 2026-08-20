@@ -117,21 +117,23 @@ class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     thread_id: str
 
-
 def chat_node(state: ChatState):
     system_message = SystemMessage(
         content=(
-            "You are a helpful AI assistant with access to tools.\n\n"
-            "Available tools:\n"
-            "- rag_tool → Use for questions about the uploaded PDF.\n"
-            "- search_tool → Use for current news, recent events, or real-time information.\n"
-            "- calculator → Use for math calculations.\n\n"
-            "Instructions:\n"
-            "1. Call the correct tool when needed.\n"
-            "2. After receiving the tool result, you MUST give a clear final answer.\n"
-            "3. Never stop after calling a tool."
+            "You are a smart and helpful AI assistant.\n\n"
+            "You have access to these tools:\n"
+            "- search_tool: Use this for any current news, recent events, or real-time information.\n"
+            "- rag_tool: Use this only when the user asks about an uploaded PDF.\n"
+            "- calculator: Use for math questions.\n\n"
+            "Very Important Rules:\n"
+            "1. When the user asks for news or current information → ALWAYS call search_tool first.\n"
+            "2. After you get the result from search_tool, you MUST write a clear, complete, and well-written final answer.\n"
+            "3. Never reply with just one word, '?', '!', or incomplete sentences.\n"
+            "4. Summarize the search results nicely and give useful information to the user.\n"
+            "5. If the search tool returns results, use them to answer properly."
         )
     )
+
     messages = [system_message] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
