@@ -28,27 +28,25 @@ from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
 
 # ============================================================
 # GROQ API KEY
-os.environ["GROQ_API_KEY"] = "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"
+groq_api_key = os.environ.get("GROQ_API_KEY")
+
+llm = ChatGroq(
+    model="openai/gpt-oss-120b",
+    temperature=0.2,
+    api_key=groq_api_key,
+)
 # ============================================================
 
 # Set your key in the terminal instead:
 # export GROQ_API_KEY="your_new_key_here"
 
-if not os.environ.get("GROQ_API_KEY"):
-    raise ValueError(
-        "GROQ_API_KEY is not set. "
-        "Run: export GROQ_API_KEY='your_new_key_here'"
-    )
 
 
 # ============================================================
 # LLM
 # ============================================================
 
-llm = ChatGroq(
-    model="openai/gpt-oss-120b",
-    temperature=0.2,
-)
+
 
 
 # ============================================================
